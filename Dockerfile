@@ -33,8 +33,7 @@ RUN python -m venv /.venv \
 # Define a second stage for the runtime, using the same Debian Bookworm slim image
 FROM python:3.12-slim-bookworm as final
 
-# Upgrade libc-bin in the final stage to ensure security patch is applied
-FROM python:3.12-slim-bookworm as final
+
 
 # Upgrade libc-bin and perl-base to ensure security patches are applied
 RUN apt-get update && apt-get install -y --no-install-recommends \
