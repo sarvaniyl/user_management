@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     libc-bin \
-    perl-base \
+    perl-base=5.36.0-7+deb12u2 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
