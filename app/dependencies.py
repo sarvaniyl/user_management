@@ -112,6 +112,7 @@ def require_role(allowed_roles: List[str]):
     """
     async def role_dependency(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
         try:
+            from app.services.user_service import UserService
             # First validate the token and get the email
             email = validate_token_and_get_subject(token)
             
