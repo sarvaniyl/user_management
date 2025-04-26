@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 from settings.config import settings
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 

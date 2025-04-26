@@ -5,12 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import Database
 from app.utils.template_manager import TemplateManager
 from app.services.email_service import EmailService
-from app.services.jwt_service import decode_token
+
 from settings.config import Settings
 from fastapi import Depends
 from typing import List
 from app.services.jwt_service import decode_token, validate_token_and_get_subject, validate_token_and_get_role
-from app.services.user_service import UserService
+
 import logging
 
 
@@ -58,6 +58,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession
         HTTPException: If token is invalid or user not found
     """
     try:
+        from app.services.user_service import UserService
         # Validate token and get subject (email)
         email = validate_token_and_get_subject(token)
         
