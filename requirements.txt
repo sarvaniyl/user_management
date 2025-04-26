@@ -23,7 +23,7 @@ fastapi
 greenlet==3.0.3
 gunicorn==23.0.0
 h11==0.16.0
-httpcore==1.1.0
+httpcore
 httpx==0.27.0
 idna==3.6
 iniconfig==2.0.0
