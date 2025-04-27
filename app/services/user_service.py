@@ -253,3 +253,35 @@ class UserService:
             await session.commit()
             return True
         return False
+    @classmethod
+    async def update_professional_status(cls, session: AsyncSession, user_id: UUID, is_professional: bool) -> Optional[User]:
+        """
+        Update a user's professional status and record the timestamp of the change.
+        
+        Args:
+            session: The database session
+            user_id: The UUID of the user to update
+            is_professional: Boolean indicating whether the user should have professional status
+            
+        Returns:
+            The updated User object if successful, None otherwise
+        """
+        try:
+            user = await cls.get_by_id(session, user_id)
+            if not user:
+                logger.error(f"User {user_id} not found when updating professional status.")
+                return None
+                
+            user.is_professional = is_professional
+            user.professional_status_updated_at = datetime.now(timezone.utc)
+            
+            session.add(user)
+            await session.commit()
+            await session.refresh(user)
+            
+            logger.info(f"Professional status for user {user_id} updated to {is_professional}")
+            return user
+        except Exception as e:
+            logger.error(f"Error updating professional status for user {user_id}: {e}")
+            await session.rollback()
+            return None

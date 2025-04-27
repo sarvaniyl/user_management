@@ -40,6 +40,8 @@ def test_create_user_links(mock_request):
     assert normalize_url(str(links[0].href)) == f"http://testserver/get_user/{user_id}"
     assert normalize_url(str(links[1].href)) == f"http://testserver/update_user/{user_id}"
     assert normalize_url(str(links[2].href)) == f"http://testserver/delete_user/{user_id}"
+    
+
 
 def test_generate_pagination_links(mock_request):
     skip = 10

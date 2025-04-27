@@ -245,3 +245,141 @@ async def verify_email(user_id: UUID, token: str, db: AsyncSession = Depends(get
     if await UserService.verify_email_with_token(db, user_id, token):
         return {"message": "Email verified successfully"}
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
+
+
+@router.put("/me/profile", response_model=UserResponse, tags=["User Profile Management"])
+async def update_my_profile(
+    profile_update: UserUpdate, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update the authenticated user's own profile information.
+    
+    This endpoint allows users to update their profile details without admin privileges.
+    Users can only update limited fields related to their profile information.
+    
+    - **profile_update**: UserUpdate model with updated profile information.
+    """
+    # Get the user's information from the database
+    user = await UserService.get_by_email(db, current_user["sub"])
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Restrict which fields can be updated by the user themselves
+    allowed_fields = ["first_name", "last_name", "bio", "profile_picture_url", 
+                      "linkedin_profile_url", "github_profile_url", "nickname"]
+    
+    update_data = profile_update.model_dump(exclude_unset=True)
+    filtered_data = {k: v for k, v in update_data.items() if k in allowed_fields}
+    
+    if not filtered_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="No valid fields to update"
+        )
+    
+    updated_user = await UserService.update(db, user.id, filtered_data)
+    
+    return UserResponse.model_construct(
+        id=updated_user.id,
+        bio=updated_user.bio,
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        nickname=updated_user.nickname,
+        email=updated_user.email,
+        role=updated_user.role,
+        last_login_at=updated_user.last_login_at,
+        profile_picture_url=updated_user.profile_picture_url,
+        github_profile_url=updated_user.github_profile_url,
+        linkedin_profile_url=updated_user.linkedin_profile_url,
+        created_at=updated_user.created_at,
+        updated_at=updated_user.updated_at,
+        
+        links=create_user_links(updated_user.id, request)
+    )
+
+@router.put("/me/", response_model=UserResponse, tags=["User Profile Management"])
+async def update_my_account(
+    user_update: UserUpdate, 
+    request: Request, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update the authenticated user's account information.
+    
+    This endpoint allows users to update their account details without admin privileges.
+    
+    - **user_update**: UserUpdate model with updated account information.
+    """
+    # Get the user's information from the database
+    user = await UserService.get_by_email(db, current_user["sub"])
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Update the user's account information
+    updated_user = await UserService.update(db, user.id, user_update.model_dump(exclude_unset=True))
+    
+    return UserResponse.model_construct(
+        id=updated_user.id,
+        bio=updated_user.bio,
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        nickname=updated_user.nickname,
+        email=updated_user.email,
+        role=updated_user.role,
+        last_login_at=updated_user.last_login_at,
+        profile_picture_url=updated_user.profile_picture_url,
+        github_profile_url=updated_user.github_profile_url,
+        linkedin_profile_url=updated_user.linkedin_profile_url,
+        created_at=updated_user.created_at,
+        updated_at=updated_user.updated_at,
+        links=create_user_links(updated_user.id, request)
+    )
+    
+@router.put("/users/{user_id}/professional-status", response_model=UserResponse, tags=["User Profile Management"])
+async def update_professional_status(
+    user_id: UUID, 
+    request: Request,
+    is_professional: bool = True,
+    db: AsyncSession = Depends(get_db), 
+    current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))
+):
+    """
+    Update a user's professional status.
+    
+    This endpoint allows administrators and managers to upgrade or downgrade 
+    a user's professional status.
+    
+    - **user_id**: UUID of the user to update.
+    - **is_professional**: Boolean indicating whether the user should have professional status.
+    """
+    user = await UserService.get_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Update professional status
+    update_data = {"is_professional": is_professional}
+    updated_user = await UserService.update_professional_status(db, user_id, is_professional)
+    user_links = create_user_links(updated_user.id, request)
+    user_links = add_professional_status_link(user_links, updated_user.id, request)
+    
+    return UserResponse.model_construct(
+        id=updated_user.id,
+        bio=updated_user.bio,
+        first_name=updated_user.first_name,
+        last_name=updated_user.last_name,
+        nickname=updated_user.nickname,
+        email=updated_user.email,
+        role=updated_user.role,
+        is_professional=updated_user.is_professional,
+        last_login_at=updated_user.last_login_at,
+        profile_picture_url=updated_user.profile_picture_url,
+        github_profile_url=updated_user.github_profile_url,
+        linkedin_profile_url=updated_user.linkedin_profile_url,
+        created_at=updated_user.created_at,
+        updated_at=updated_user.updated_at,
+        links=user_links
+    )
