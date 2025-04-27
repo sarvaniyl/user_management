@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import (
     Column, String, Integer, DateTime, Boolean, func, Enum as SQLAlchemyEnum
 )
+from sqlalchemy import Index, text
 from sqlalchemy.dialects.postgresql import UUID, ENUM
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
@@ -73,11 +74,35 @@ class User(Base):
     verification_token = Column(String, nullable=True)
     email_verified: Mapped[bool] = Column(Boolean, default=False, nullable=False)
     hashed_password: Mapped[str] = Column(String(255), nullable=False)
+    # Define indexes for frequently queried fields
+    __table_args__ = (
+        # Index for email lookups (login, verification)
+        Index('idx_users_email', email),
+        
+        # Index for nickname lookups
+        Index('idx_users_nickname', nickname),
+        
+        # Composite index for role-based queries
+        Index('idx_users_role', role),
+        
+        # Index for login status queries
+        Index('idx_users_is_locked', is_locked),
+        
+        # Composite index for verification status
+        Index('idx_users_email_verified', email_verified),
+        
+        # Index for time-based queries
+        Index('idx_users_created_at', created_at),
+        Index('idx_users_updated_at', updated_at),
+        
+        # Specialized composite index for common filtering scenarios
+        Index('idx_users_role_verified', role, email_verified)
+    )
 
 
     def __repr__(self) -> str:
         """Provides a readable representation of a user object."""
-        return f"<User {self.nickname}, Role: {self.role.name}>"
+        return f"<User(id={self.id}, email={self.email}, nickname={self.nickname}, role={self.role})>"
 
     def lock_account(self):
         self.is_locked = True

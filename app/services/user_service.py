@@ -1,7 +1,8 @@
 from builtins import Exception, bool, classmethod, int, str
 from datetime import datetime, timezone
 import secrets
-from typing import Optional, Dict, List
+import html
+from typing import Optional, Dict, List, Any
 from pydantic import ValidationError
 from sqlalchemy import func, null, update, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,11 +16,32 @@ from uuid import UUID
 from app.services.email_service import EmailService
 from app.models.user_model import UserRole
 import logging
+import re
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
 
 class UserService:
+    @classmethod
+    def sanitize_input(cls, value: Any) -> Any:
+        """Sanitize input to prevent injection attacks"""
+        if isinstance(value, str):
+            # Sanitize string inputs
+            # HTML escape to prevent XSS
+            sanitized = html.escape(value)
+            # Remove potentially dangerous patterns
+            sanitized = re.sub(r'[\'";`]', '', sanitized)
+            return sanitized
+        elif isinstance(value, dict):
+            # Recursively sanitize dictionary values
+            return {k: cls.sanitize_input(v) for k, v in value.items()}
+        elif isinstance(value, list):
+            # Recursively sanitize list items
+            return [cls.sanitize_input(item) for item in value]
+        else:
+            # Return other types unchanged (numbers, booleans, etc.)
+            return value
+
     @classmethod
     async def _execute_query(cls, session: AsyncSession, query):
         try:
@@ -33,30 +55,43 @@ class UserService:
 
     @classmethod
     async def _fetch_user(cls, session: AsyncSession, **filters) -> Optional[User]:
-        query = select(User).filter_by(**filters)
+        # Sanitize filter values
+        sanitized_filters = {k: cls.sanitize_input(v) for k, v in filters.items()}
+        query = select(User).filter_by(**sanitized_filters)
         result = await cls._execute_query(session, query)
         return result.scalars().first() if result else None
 
     @classmethod
     async def get_by_id(cls, session: AsyncSession, user_id: UUID) -> Optional[User]:
+        # UUID is a safe type and doesn't need sanitization
         return await cls._fetch_user(session, id=user_id)
 
     @classmethod
     async def get_by_nickname(cls, session: AsyncSession, nickname: str) -> Optional[User]:
-        return await cls._fetch_user(session, nickname=nickname)
+        # Sanitize nickname
+        sanitized_nickname = cls.sanitize_input(nickname)
+        return await cls._fetch_user(session, nickname=sanitized_nickname)
 
     @classmethod
     async def get_by_email(cls, session: AsyncSession, email: str) -> Optional[User]:
-        return await cls._fetch_user(session, email=email)
+        # Sanitize email
+        sanitized_email = cls.sanitize_input(email)
+        return await cls._fetch_user(session, email=sanitized_email)
 
     @classmethod
     async def create(cls, session: AsyncSession, user_data: Dict[str, str], email_service: EmailService) -> Optional[User]:
         try:
-            validated_data = UserCreate(**user_data).model_dump()
+            # Sanitize all user inputs
+            sanitized_data = cls.sanitize_input(user_data)
+            
+            # Let Pydantic model validate the sanitized data
+            validated_data = UserCreate(**sanitized_data).model_dump()
+            
             existing_user = await cls.get_by_email(session, validated_data['email'])
             if existing_user:
                 logger.error("User with given email already exists.")
                 return None
+                
             validated_data['hashed_password'] = hash_password(validated_data.pop('password'))
             new_user = User(**validated_data)
             new_nickname = generate_nickname()
@@ -68,7 +103,6 @@ class UserService:
             new_user.role = UserRole.ADMIN if user_count == 0 else UserRole.ANONYMOUS            
             if new_user.role == UserRole.ADMIN:
                 new_user.email_verified = True
-
             else:
                 new_user.verification_token = generate_verification_token()
                 await email_service.send_verification_email(new_user)
@@ -83,13 +117,19 @@ class UserService:
     @classmethod
     async def update(cls, session: AsyncSession, user_id: UUID, update_data: Dict[str, str]) -> Optional[User]:
         try:
-            # validated_data = UserUpdate(**update_data).dict(exclude_unset=True)
-            validated_data = UserUpdate(**update_data).model_dump(exclude_unset=True)
+            # Sanitize all user inputs
+            sanitized_data = cls.sanitize_input(update_data)
+            
+            # Let Pydantic model validate the sanitized data
+            validated_data = UserUpdate(**sanitized_data).model_dump(exclude_unset=True)
 
             if 'password' in validated_data:
                 validated_data['hashed_password'] = hash_password(validated_data.pop('password'))
+                
+            # Use parameterized query with sanitized data
             query = update(User).where(User.id == user_id).values(**validated_data).execution_options(synchronize_session="fetch")
             await cls._execute_query(session, query)
+            
             updated_user = await cls.get_by_id(session, user_id)
             if updated_user:
                 session.refresh(updated_user)  # Explicitly refresh the updated user object
@@ -114,7 +154,11 @@ class UserService:
 
     @classmethod
     async def list_users(cls, session: AsyncSession, skip: int = 0, limit: int = 10) -> List[User]:
-        query = select(User).offset(skip).limit(limit)
+        # Sanitize pagination parameters
+        sanitized_skip = max(0, int(skip))  # Ensure non-negative
+        sanitized_limit = min(100, max(1, int(limit)))  # Bound between 1 and 100
+        
+        query = select(User).offset(sanitized_skip).limit(sanitized_limit)
         result = await cls._execute_query(session, query)
         return result.scalars().all() if result else []
 
@@ -122,10 +166,12 @@ class UserService:
     async def register_user(cls, session: AsyncSession, user_data: Dict[str, str], get_email_service) -> Optional[User]:
         return await cls.create(session, user_data, get_email_service)
     
-
     @classmethod
     async def login_user(cls, session: AsyncSession, email: str, password: str) -> Optional[User]:
-        user = await cls.get_by_email(session, email)
+        # Sanitize email
+        sanitized_email = cls.sanitize_input(email)
+        
+        user = await cls.get_by_email(session, sanitized_email)
         if user:
             if user.email_verified is False:
                 return None
@@ -147,13 +193,18 @@ class UserService:
 
     @classmethod
     async def is_account_locked(cls, session: AsyncSession, email: str) -> bool:
-        user = await cls.get_by_email(session, email)
+        # Sanitize email
+        sanitized_email = cls.sanitize_input(email)
+        
+        user = await cls.get_by_email(session, sanitized_email)
         return user.is_locked if user else False
-
 
     @classmethod
     async def reset_password(cls, session: AsyncSession, user_id: UUID, new_password: str) -> bool:
-        hashed_password = hash_password(new_password)
+        # Sanitize password
+        sanitized_password = cls.sanitize_input(new_password)
+        
+        hashed_password = hash_password(sanitized_password)
         user = await cls.get_by_id(session, user_id)
         if user:
             user.hashed_password = hashed_password
@@ -166,8 +217,11 @@ class UserService:
 
     @classmethod
     async def verify_email_with_token(cls, session: AsyncSession, user_id: UUID, token: str) -> bool:
+        # Sanitize token
+        sanitized_token = cls.sanitize_input(token)
+        
         user = await cls.get_by_id(session, user_id)
-        if user and user.verification_token == token:
+        if user and user.verification_token == sanitized_token:
             user.email_verified = True
             user.verification_token = None  # Clear the token once used
             user.role = UserRole.AUTHENTICATED
