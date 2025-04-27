@@ -28,7 +28,7 @@ async def test_user_repr(user: User):
     """
     Tests the __repr__ method for accurate representation of the User object.
     """
-    assert repr(user) == f"<User {user.nickname}, Role: {user.role.name}>", "__repr__ should include nickname and role"
+    assert repr(user) == f"<User(id={user.id}, email={user.email}, nickname={user.nickname}, role={user.role})>", "__repr__ should include nickname and role"
 
 @pytest.mark.asyncio
 async def test_failed_login_attempts_increment(db_session: AsyncSession, user: User):
