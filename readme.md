@@ -1,24 +1,22 @@
-# User Management  Documentation
+# User Management System 
+
+This repository contains new features, test cases, and bug fixes for a user management system, focusing on improving data validation, enhancing security, and addressing potential bugs in the codebase.
 
 ## QA Issues Resolved
 
-1. **Insufficient Input Validation:** User input validation is limited in several endpoints, particularly for email formats and password complexity requirements.
+1. **Insufficient Input Validation:** User input validation is limited in several endpoints, particularly for email formats and password complexity requirements. [View code](https://github.com/sarvaniyl/user_management/tree/main/app/schemas/user_schemas.py) | [Issue #1](https://github.com/sarvaniyl/user_management/issues/1)
 
-2. **Improper JWT Token Validation:** The JWT validation doesn't check for token expiration or signature properly in some cases, which could lead to security vulnerabilities.
+2. **Improper JWT Token Validation:** The JWT validation doesn't check for token expiration or signature properly in some cases, which could lead to security vulnerabilities. [View code](https://github.com/sarvaniyl/user_management/tree/main/app/services/jwt_service.py) | [Issue #3](https://github.com/sarvaniyl/user_management/issues/3)
 
-3. **No Input Sanitization:** User input isn't properly sanitized before being used in database queries, potentially leading to injection attacks.
+3. **No Input Sanitization:** User input isn't properly sanitized before being used in database queries, potentially leading to injection attacks. [View code](https://github.com/sarvaniyl/user_management/tree/main/app/schemas/user_schemas.py) | [Issue #4](https://github.com/sarvaniyl/user_management/issues/4)
 
-4. **Missing Database Indexing:** No indexes are defined on frequently queried fields like email and nickname, which could lead to performance issues as the database grows.
+4. **Missing Database Indexing:** No indexes are defined on frequently queried fields like email and nickname, which could lead to performance issues as the database grows. [View code](https://github.com/sarvaniyl/user_management/tree/main/app/models/user_model.py) | [Issue #6](https://github.com/sarvaniyl/user_management/issues/6)
 
-5. **Improper Error Handling in Email Service:** The email_service.py directly calls SMTP methods without proper exception handling, which could lead to unhandled exceptions if email sending fails.
+5. **Improper Error Handling in Email Service:** The email_service.py directly calls SMTP methods without proper exception handling, which could lead to unhandled exceptions if email sending fails. [View code](https://github.com/sarvaniyl/user_management/tree/main/app/services/email_service.py) | [Issue #7](https://github.com/sarvaniyl/user_management/issues/7)
 
 ## PyTest Test Suite 
 
-This document describes the purpose and functionality of the PyTest test cases provided. These tests cover various aspects of a web application, including user authentication, registration, password management, and user profile updates.
-
-### Test Suite Overview
-
-The test suite uses PyTest with the `pytest-asyncio` plugin to perform asynchronous testing. It includes the following test cases:
+The test suite uses PyTest with the `pytest-asyncio` plugin to perform asynchronous testing. These tests cover various aspects of the web application, including user authentication, registration, password management, and user profile updates. [View test code](https://github.com/sarvaniyl/user_management/tree/main/tests/test_api/test_users_api.py)
 
 ### User Authentication Tests
 
@@ -91,7 +89,7 @@ The test suite uses PyTest with the `pytest-asyncio` plugin to perform asynchron
 ## Features Developed
 
 ### User Search and Filtering
-**Description:** Implement search and filtering capabilities to allow administrators to easily find and manage users based on various criteria.
+**Description:** Implemented search and filtering capabilities to allow administrators to easily find and manage users based on various criteria.
 
 ### User Profile Management
-**Description:** Enhance the user profile management functionality to allow users to update their profile fields and enable managers and admins to upgrade users to professional status.
+**Description:** Enhanced the user profile management functionality to allow users to update their profile fields and enable managers and admins to upgrade users to professional status.
