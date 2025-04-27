@@ -17,6 +17,7 @@ from app.services.email_service import EmailService
 from app.models.user_model import UserRole
 import logging
 import re
+from sqlalchemy import and_, or_, desc, asc
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -285,3 +286,116 @@ class UserService:
             logger.error(f"Error updating professional status for user {user_id}: {e}")
             await session.rollback()
             return None
+    # Add to app/services/user_service.py
+    @classmethod
+    async def search_users(
+        cls, 
+        session: AsyncSession, 
+        search_term: Optional[str] = None,
+        role: Optional[UserRole] = None,
+        is_verified: Optional[bool] = None,
+        is_locked: Optional[bool] = None,
+        is_professional: Optional[bool] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        sort_by: str = "created_at",
+        sort_order: str = "desc",
+        skip: int = 0,
+        limit: int = 10
+    ) -> tuple[List[User], int]:
+        """
+        Search for users based on various criteria.
+        
+        Args:
+            session: Database session
+            search_term: String to search in email, nickname, first_name, last_name
+            role: Filter by user role
+            is_verified: Filter by verification status
+            is_locked: Filter by locked status
+            is_professional: Filter by professional status
+            date_from: Filter users created after this date
+            date_to: Filter users created before this date
+            sort_by: Field to sort by
+            sort_order: Sort direction ('asc' or 'desc')
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            
+        Returns:
+            Tuple of (list of users, total count)
+        """
+        # Sanitize inputs
+        sanitized_search = cls.sanitize_input(search_term) if search_term else None
+        sanitized_skip = max(0, int(skip))
+        sanitized_limit = min(100, max(1, int(limit)))
+        
+        # Start building the query
+        query = select(User)
+        count_query = select(func.count()).select_from(User)
+        
+        # Apply filters
+        filters = []
+        
+        # Search term filter (looks in multiple columns)
+        if sanitized_search:
+            search_filters = [
+                User.email.ilike(f"%{sanitized_search}%"),
+                User.nickname.ilike(f"%{sanitized_search}%"),
+                User.first_name.ilike(f"%{sanitized_search}%"),
+                User.last_name.ilike(f"%{sanitized_search}%")
+            ]
+            filters.append(or_(*search_filters))
+        
+        # Role filter
+        if role:
+            filters.append(User.role == role)
+        
+        # Verification status filter
+        if is_verified is not None:
+            filters.append(User.email_verified == is_verified)
+        
+        # Lock status filter
+        if is_locked is not None:
+            filters.append(User.is_locked == is_locked)
+        
+        # Professional status filter
+        if is_professional is not None:
+            filters.append(User.is_professional == is_professional)
+        
+        # Date range filter
+        if date_from:
+            filters.append(User.created_at >= date_from)
+        if date_to:
+            filters.append(User.created_at <= date_to)
+        
+        # Apply all filters to the query
+        if filters:
+            query = query.where(and_(*filters))
+            count_query = count_query.where(and_(*filters))
+        
+        # Apply sorting
+        valid_sort_fields = {
+            "created_at": User.created_at,
+            "updated_at": User.updated_at,
+            "email": User.email,
+            "nickname": User.nickname,
+            "last_login_at": User.last_login_at
+        }
+        
+        sort_field = valid_sort_fields.get(sort_by, User.created_at)
+        query = query.order_by(desc(sort_field) if sort_order.lower() == "desc" else asc(sort_field))
+        
+        # Apply pagination
+        query = query.offset(sanitized_skip).limit(sanitized_limit)
+        
+        # Execute queries
+        try:
+            users_result = await session.execute(query)
+            count_result = await session.execute(count_query)
+            
+            users = users_result.scalars().all()
+            total_count = count_result.scalar()
+            
+            return users, total_count
+        except SQLAlchemyError as e:
+            logger.error(f"Database error in search_users: {e}")
+            return [], 0

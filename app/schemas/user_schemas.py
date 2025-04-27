@@ -9,7 +9,7 @@ import uuid
 import re
 from app.models.user_model import UserRole
 from app.utils.nickname_gen import generate_nickname
-
+from app.schemas.pagination_schema import PaginationLink
 
 def validate_url(url: Optional[str]) -> Optional[str]:
     if url is None:
@@ -148,3 +148,46 @@ class UserListResponse(BaseModel):
     total: int = Field(..., example=100)
     page: int = Field(..., example=1)
     size: int = Field(..., example=10)
+    
+class UserSearchResponse(BaseModel):
+    """Response model for user search results"""
+    items: List[UserResponse] = Field(..., description="List of users matching search criteria")
+    total: int = Field(..., description="Total number of users matching search criteria")
+    page: int = Field(..., description="Current page number")
+    pages: int = Field(..., description="Total number of pages")
+    per_page: int = Field(..., description="Number of items per page")
+    links: List[PaginationLink] = Field(default_factory=list, 
+                                       description="Navigation links for pagination")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "items": [
+                    {
+                        "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                        "email": "john.doe@example.com",
+                        "nickname": "john_doe",
+                        "first_name": "John",
+                        "last_name": "Doe",
+                        "role": "AUTHENTICATED",
+                        "created_at": "2023-01-01T12:00:00Z"
+                    }
+                ],
+                "total": 42,
+                "page": 1,
+                "pages": 5,
+                "per_page": 10,
+                "links": [
+                    {
+                        "rel": "self",
+                        "href": "https://api.example.com/users?page=1&per_page=10",
+                        "method": "GET"
+                    },
+                    {
+                        "rel": "next",
+                        "href": "https://api.example.com/users?page=2&per_page=10",
+                        "method": "GET"
+                    }
+                ]
+            }
+        }

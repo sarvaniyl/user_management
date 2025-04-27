@@ -27,12 +27,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_current_user, get_db, get_email_service, require_role
 from app.schemas.pagination_schema import EnhancedPagination
 from app.schemas.token_schema import TokenResponse
-from app.schemas.user_schemas import LoginRequest, UserBase, UserCreate, UserListResponse, UserResponse, UserUpdate
+from app.schemas.user_schemas import LoginRequest, UserBase, UserCreate, UserListResponse, UserResponse, UserUpdate,UserSearchResponse
 from app.services.user_service import UserService
 from app.services.jwt_service import create_access_token
 from app.utils.link_generation import create_user_links, generate_pagination_links
 from app.dependencies import get_settings
 from app.services.email_service import EmailService
+from app.schemas.search_schemas import UserSearchParams
+from app.schemas.search_schemas import UserSearchParams
+from app.schemas.pagination_schema import PaginationLink
+
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 settings = get_settings()
@@ -382,4 +386,114 @@ async def update_professional_status(
         created_at=updated_user.created_at,
         updated_at=updated_user.updated_at,
         links=user_links
+    )
+    
+    
+
+
+@router.get("/users/search", response_model=UserSearchResponse, tags=["User Management Requires (Admin or Manager Roles)"])
+async def search_users(
+    request: Request,
+    params: UserSearchParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_role(["ADMIN", "MANAGER"]))
+):
+    """
+    Search and filter users based on various criteria.
+    
+    This endpoint allows administrators to search for users by various attributes
+    and filter the results.
+    
+    Parameters:
+    - **search**: Optional search term for email, nickname, first or last name
+    - **role**: Optional filter by user role
+    - **is_verified**: Optional filter by email verification status
+    - **is_locked**: Optional filter by account lock status
+    - **is_professional**: Optional filter by professional status
+    - **date_from**: Optional filter users created after this date
+    - **date_to**: Optional filter users created before this date
+    - **sort_by**: Field to sort by (default: created_at)
+    - **sort_order**: Sort order: asc or desc (default: desc)
+    - **page**: Page number (default: 1)
+    - **per_page**: Number of items per page (default: 10)
+    
+    Returns:
+    - List of matching users with pagination info and navigation links
+    """
+    # Calculate skip value from page
+    skip = (params.page - 1) * params.per_page
+    
+    # Call the search service
+    users, total_count = await UserService.search_users(
+        session=db,
+        search_term=params.search,
+        role=params.role,
+        is_verified=params.is_verified,
+        is_locked=params.is_locked,
+        is_professional=params.is_professional,
+        date_from=params.date_from,
+        date_to=params.date_to,
+        sort_by=params.sort_by,
+        sort_order=params.sort_order,
+        skip=skip,
+        limit=params.per_page
+    )
+    
+    # Convert users to response models
+    user_responses = [
+        UserResponse.model_construct(
+            id=user.id,
+            nickname=user.nickname,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            bio=user.bio,
+            profile_picture_url=user.profile_picture_url,
+            github_profile_url=user.github_profile_url,
+            linkedin_profile_url=user.linkedin_profile_url,
+            role=user.role,
+            email=user.email,
+            last_login_at=user.last_login_at,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            links=create_user_links(user.id, request)
+        )
+        for user in users
+    ]
+    
+    # Calculate total pages
+    total_pages = (total_count + params.per_page - 1) // params.per_page
+    
+    # Generate pagination links
+    pagination_links = []
+    
+    # Current page
+    current_url = request.url
+    pagination_links.append(PaginationLink(rel="self", href=str(current_url)))
+    
+    # First page
+    first_url = current_url.include_query_params(page=1, per_page=params.per_page)
+    pagination_links.append(PaginationLink(rel="first", href=str(first_url)))
+    
+    # Previous page
+    if params.page > 1:
+        prev_url = current_url.include_query_params(page=params.page-1, per_page=params.per_page)
+        pagination_links.append(PaginationLink(rel="prev", href=str(prev_url)))
+    
+    # Next page
+    if params.page < total_pages:
+        next_url = current_url.include_query_params(page=params.page+1, per_page=params.per_page)
+        pagination_links.append(PaginationLink(rel="next", href=str(next_url)))
+    
+    # Last page
+    last_url = current_url.include_query_params(page=total_pages, per_page=params.per_page)
+    pagination_links.append(PaginationLink(rel="last", href=str(last_url)))
+    
+    # Return the response
+    return UserSearchResponse(
+        items=user_responses,
+        total=total_count,
+        page=params.page,
+        pages=total_pages,
+        per_page=params.per_page,
+        links=pagination_links
     )
